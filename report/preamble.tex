@@ -1,0 +1,14 @@
+% --- https://tex.stackexchange.com/a/18531 ---
+\usepackage{titlesec}
+\usepackage{titling}
+\newfontfamily\headingfont[]{Montserrat}
+\titleformat*{\section}{\LARGE\headingfont}
+\titleformat*{\subsection}{\Large\headingfont}
+\titleformat*{\subsubsection}{\large\headingfont}
+\renewcommand{\maketitlehooka}{\Huge\headingfont}
+% ---------------------------------------------
+
+\renewcommand{\maketitlehookb}{\rmfamily}
+\renewcommand{\maketitlehookc}{\small\rmfamily}
+
+\renewcommand{\abstractname}{\headingfont{Summary}}

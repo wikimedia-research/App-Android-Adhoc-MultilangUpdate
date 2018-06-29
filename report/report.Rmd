@@ -1,0 +1,37 @@
+---
+title: Wikipedia Android App
+subtitle: Multilingual Update Post-release Report
+author: Mikhail Popov, Product Analytics
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+
+abstract: |
+  Your abstract will be typeset here, and used by default a visually distinctive font.
+  An abstract should explain to the general reader the major contributions of the article.
+
+output:
+  pdf_document:
+    includes:
+      in_header: preamble.tex
+    latex_engine: xelatex
+
+bibliography: packages.bib
+csl: apa.csl
+nocite: '@*'
+
+fontsize: 12pt
+geometry: margin=1in
+mainfont: "Source Serif Pro"
+subparagraph: yes
+---
+
+## Introduction 
+
+...
+
+## Acknowledgements
+
+This report was created using the statistical software and programming language *R* [-@base]; with data visualization and analysis performed using packages which include *ggplot2* and *dplyr* [@ggplot2; -@dplyr]. Data collection relied on the excellent work of the [Mobile Apps](https://www.mediawiki.org/wiki/Wikimedia_Apps/Team) and [Analytics Engineering](https://wikitech.wikimedia.org/wiki/Analytics) teams.
+
+\newpage
+
+# References
