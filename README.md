@@ -16,6 +16,8 @@ The updated features include:
 - Language settings
   - distribution of number of languages set
   - % of users who change their primary language
+  - most common languages
+  - most common language combinations
 - Of users who customized their feed and have >1 language
   - % who picked enabled some cards for one language but not the other
 - Search
@@ -24,6 +26,7 @@ The updated features include:
 - Engagement with Explore Feed by monolingual vs bilingual vs multilingual (3+)
   - overall clickthrough rate (CTR) regardless of card type
   - non-language-agnostic card CTR
+  - most popular languages per card / most popular cards per language
 - Reading behavior by mono/bi/multi
   - median session length
   - median pages viewed per session

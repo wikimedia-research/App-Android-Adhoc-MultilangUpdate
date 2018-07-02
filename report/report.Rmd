@@ -1,14 +1,26 @@
 ---
-title: Wikipedia Android App
-subtitle: Multilingual Update Post-release Report
-author: Mikhail Popov, Product Analytics
-date: "`r format(Sys.Date(), '%d %B %Y')`"
+title: Wikipedia Android app multilingual update post-release report
+author: Mikhail Popov
+date: "`r gsub('0(\\d)', '\\1', format(Sys.Date(), '%d %B %Y'))`"
 
 abstract: |
   Your abstract will be typeset here, and used by default a visually distinctive font.
   An abstract should explain to the general reader the major contributions of the article.
 
 output:
+  memor::pdf_memo:
+    use_profile: no
+    logo: "../../wikimedia_foundation_logo.png"
+    logo_height: "1.25in"
+    number_sections: no
+    libertine: no
+    company:
+      name: "\\href{https://www.mediawiki.org/wiki/Wikimedia_Audiences}{Wikimedia Audiences}"
+      address: "\\href{https://www.mediawiki.org/wiki/Product_Analytics}{Product Analytics}"
+      email: product-analytics@wikimedia.org
+    includes:
+      in_header: preamble.tex
+    latex_engine: xelatex
   pdf_document:
     includes:
       in_header: preamble.tex
@@ -35,3 +47,5 @@ This report was created using the statistical software and programming language 
 \newpage
 
 # References
+
+\small
