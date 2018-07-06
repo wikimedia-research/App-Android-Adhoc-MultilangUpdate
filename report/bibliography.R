@@ -6,6 +6,9 @@ pkgs <- c(
   "kableExtra", # presentation
   "DBI",        # data workflow
   "dplyr",      # data workflow
+  "forcats",    # data workflow
+  "glue",       # data workflow
+  "import",     # data workflow
   "jsonlite",   # data workflow
   "magrittr",   # data workflow
   "purrr",      # data workflow

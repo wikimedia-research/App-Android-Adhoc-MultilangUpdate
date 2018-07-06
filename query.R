@@ -1,11 +1,19 @@
 if (!dir.exists("data")) dir.create("data")
 
+# Enable/disable viewing of data as it will be written
+view_data <- FALSE
+view <- function(x, title) {
+  if (view_data) {
+    View(x, title)
+  }
+}
+
 # ssh -N stat6 -L 3307:db1108.eqiad.wmnet:3306
 con <- DBI::dbConnect(RMySQL::MySQL(), host = "127.0.0.1", group = "client", dbname = "log", port = 3307)
 
 library(glue); library(magrittr)
 
-common_cols <- "uuid, timestamp, event_app_install_id, event_client_dt"
+common_cols <- "timestamp, event_app_install_id, event_client_dt"
 
 # Language settings and searching
 language_searches <- "SELECT
@@ -22,10 +30,12 @@ FROM MobileWikiAppLanguageSearching_18113721" %>%
     languages_added_from_search = sum(added),
     total_time_spent_searching = sum(time_spent)
   ) %>%
-  dplyr::ungroup()
+  dplyr::ungroup() %T>%
+  view("language_searching") %>%
+  readr::write_rds("data/language_searching.rds")
 "SELECT
   {common_cols}, event_session_token,
-  event_source, event_initial, event_final, event_searched, event_interactions
+  event_source, event_initial, event_final, event_interactions
 FROM MobileWikiAppLanguageSettings_18113720" %>%
   glue %>%
   wmf::mysql_read(con = con) %>%
@@ -41,20 +51,9 @@ FROM MobileWikiAppLanguageSettings_18113720" %>%
     changed_primary = initial[[1]][1] != final[[1]][1],
     added = additions > 0, removed = removals > 0
   ) %>%
-  dplyr::ungroup() %>%
-  dplyr::left_join(language_searches, by = c("app_install_id", "session_token")) %T>%
-  View("language_settings") %>%
+  dplyr::ungroup() %T>%
+  view("language_settings") %>%
   readr::write_rds("data/language_settings.rds")
-
-# Session summary
-"SELECT
-  {common_cols},
-  event_languages, event_totalPages AS total_pages, event_length AS session_length
-FROM MobileWikiAppSessions_18115099" %>%
-  glue() %>%
-  wmf::mysql_read(con = con) %>%
-  wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt"), json_cols = "event_languages") %>%
-  readr::write_rds("data/session_summaries.rds")
 
 # Feed customization
 card_types <- c(
@@ -84,18 +83,35 @@ card_types <- c(
   "98" = "offline",
   "99" = "progress"
 )
+feed_cards <- c(
+  "0" = "In the news",
+  "1" = "On this day",
+  "2" = "Continue reading",
+  "3" = "Trending",
+  "4" = "Today on Wikipedia",
+  "5" = "Randomizer",
+  "6" = "Featured article",
+  "7" = "Picture of the day",
+  "8" = "Because you read"
+)
 "SELECT
   {common_cols},
-  event_languages, event_source, event_enabled_list, event_order_list, event_time_spent
-FROM MobileWikiAppFeedConfigure_18126175" %>%
+  event_languages, event_source, event_time_spent, event_enabled_list, event_order_list
+FROM MobileWikiAppFeedConfigure_18126175
+WHERE event_time_spent >= 0" %>%
   glue() %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(
     dt_cols = c("timestamp", "event_client_dt"),
     json_cols = c("event_languages", "event_enabled_list", "event_order_list")
   ) %>%
-  dplyr::mutate(source = card_types[as.character(source)]) %T>%
-  View("feed_customization") %>%
+  dplyr::mutate(
+    source = card_types[as.character(source)],
+    enabled_list = lapply(enabled_list, purrr::map, ~ unname(feed_cards[.x == 1])),
+    order_list = purrr::map(order_list, ~ unname(feed_cards[as.character(.x)])),
+    enabled_list_v2 = purrr::map(enabled_list, wmf::invert_list)
+  ) %T>%
+  view("feed_customization") %>%
   readr::write_rds("data/feed_customization.rds")
 
 # Feed engagement
@@ -123,25 +139,33 @@ WHERE event_action IN('enter', 'exit', 'cardShown', 'cardClicked', 'more')" %>%
   dplyr::filter(valid) %>%
   dplyr::select(-valid) %>%
   dplyr::ungroup() %T>%
-  View("feed_sessions") %>%
+  view("feed_sessions") %>%
   readr::write_rds("data/feed_sessions.rds")
 "SELECT
-  uuid, timestamp, event_client_dt, event_app_install_id, event_session_token,
+  timestamp, event_client_dt, event_app_install_id, event_session_token,
   event_time_spent, event_language, event_cardType AS card_type,
   IF(event_action = 'cardShown', 'impression', 'click') AS event
 FROM MobileWikiAppFeed_18115458
-WHERE event_action IN('cardShown', 'cardClicked')" %>%
+WHERE event_action IN('cardShown', 'cardClicked')
+  AND event_time_spent >= 0" %>%
   glue() %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt")) %>%
-  dplyr::mutate(card_type = card_types[as.character(card_type)]) %>%
+  dplyr::mutate(card_type = unname(card_types[as.character(card_type)])) %>%
   dplyr::group_by(app_install_id, session_token, card_type, language) %>%
   dplyr::summarize(
     time_spent = max(time_spent),
-    clickthrough = all(c("impression", "click") %in% event)
+    clicks = sum(event == "click"),
+    impressions = sum(event == "impression"),
+    clickthrough = "click" %in% event,
+    valid = "impression" %in% event
   ) %>%
-  dplyr::ungroup() %T>%
-  View("card_clickthroughs") %>%
+  dplyr::ungroup() %>%
+  {
+    message("Filtering out ", sum(.$valid), " invalid events.")
+    dplyr::select(dplyr::filter(., valid), -valid)
+  } %T>%
+  view("card_clickthroughs") %>%
   readr::write_rds("data/card_clickthroughs.rds")
 
 # Search
@@ -152,7 +176,7 @@ WHERE event_action = 'langswitch' AND event_language IS NOT NULL" %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt")) %>%
   tidyr::extract(language, c("from_language", "to_language"), "(.*)\\>(.*)") %T>%
-  View("search_langswitches") %>%
+  view("search_langswitches") %>%
   readr::write_rds("data/search_langswitches.rds")
 "SELECT
   {common_cols}, event_session_token,
@@ -175,7 +199,25 @@ WHERE event_action IN('start', 'results', 'click', 'cancel', 'langswitch')" %>%
   dplyr::ungroup() %>%
   dplyr::filter(events > 1, valid) %>%
   dplyr::select(-c(events, valid)) %T>%
-  View("search_sessions") %>%
+  view("search_sessions") %>%
   readr::write_rds("data/search_sessions.rds")
+
+# Session summary
+"SELECT
+  {common_cols},
+  event_languages, event_totalPages AS total_pages, event_length AS session_length
+FROM MobileWikiAppSessions_18115099
+WHERE event_length >= 0" %>%
+  glue() %>%
+  wmf::mysql_read(con = con) %>%
+  wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt"), json_cols = "event_languages") %>%
+  dplyr::mutate(n_languages = purrr::map_int(languages, length)) %>%
+  # keep 5 most recent sessions from each user, while remembering how many sessions we've observed:
+  dplyr::group_by(app_install_id) %>%
+  dplyr::arrange(client_dt, timestamp) %>%
+  dplyr::mutate(session = 1:n(), cumulative_session_length = cumsum(session_length)) %>%
+  dplyr::top_n(5, session) %>%
+  dplyr::ungroup() %>%
+  readr::write_rds("data/session_summaries.rds")
 
 DBI::dbDisconnect(con)
