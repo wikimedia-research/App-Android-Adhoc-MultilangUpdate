@@ -84,7 +84,7 @@ languages <- c(languages, c(
     \hfill
     \begin{subfigure}[b]{0.3\textwidth}
         \frame{\includegraphics[width=\textwidth]{screenshots/feed.png}}
-        \caption{The feed can now include cards -- such as "Trending" (most read articles) -- in multiple languages.}
+        \caption{Feed can now include cards (such as most read articles) in multiple languages.}
         \label{fig:feed}
     \end{subfigure}
     \hfill
@@ -242,18 +242,36 @@ feed_abilities <- feed_customization %>%
   select(app_install_id, language_ability)
 ```
 
-```{r card_language_combinations, eval=FALSE}
-# Use latest customizations only:
-card_language_combinations <- feed_customization %>%
+```{r feed_customizations}
+relevant_cards <- c("In the news", "On this day", "Trending", "Featured article")
+feed_customizations <- feed_customization %>%
   group_by(app_install_id) %>%
   top_n(1, client_dt) %>%
   ungroup %>%
-  { purrr::map_df(.$enabled_list_v2, dplyr::as_data_frame) } %>%
-  gather(card, language) %>%
+  {
+    purrr::map_df(
+      set_names(.$enabled_list_v2, .$app_install_id),
+      ~ dplyr::as_data_frame(.x[relevant_cards[relevant_cards %in% names(.x)]]),
+      .id = "app_install_id"
+    )
+  }
+```
+
+```{r card_language_combinations, eval=FALSE}
+card_language_combinations <- feed_customizations %>%
+  gather(card, language, -app_install_id) %>%
+  keep_where(!is.na(language)) %>%
   group_by(card, language) %>%
   tally %>%
-  ungroup %>%
-  keep_where(!is.na(language))
+  ungroup
+```
+
+```{r}
+card_language_combinations %>%
+  group_by(language) %>%
+  mutate(prop = n / sum(n)) %>%
+  top_n(1, n) %>%
+  # TODO: do something with this
 ```
 
 ### Engagement
