@@ -1,20 +1,18 @@
 ---
-title: Wikipedia Android app multilingual update Post-release report
+title: Wikipedia Android app multilingual update
+subtitle: Post-release report
 author: Mikhail Popov
-date: "`r gsub('0(\\d)', '\\1', format(Sys.Date(), '%d %B %Y'))`"
+date: "`r sub('^0(\\d)', '\\1', format(Sys.Date(), '%d %B %Y'))`"
 
 abstract: |
-  Your abstract will be typeset here, and used by default a visually distinctive font.
-  An abstract should explain to the general reader the major contributions of the article.
+  On 25 June 2018, the Android team released a major update to the Wikipedia app that improved and extended support for multilingual users. It enables users to set multiple languages, to get parts of the Explore Feed in those languages, and switch between them when searching for articles...
   
   ----
   
-  **Open report:** R code and RMarkdown source document are [publicly available](https://github.com/wikimedia-research/App-Android-Adhoc-MultilangUpdate)
-  under a [Creative Commons Attribution-ShareAlike 4.0 License](http://creativecommons.org/licenses/by-sa/4.0/).
+  **Open report:** R code and RMarkdown source document are [publicly available](https://github.com/wikimedia-research/App-Android-Adhoc-MultilangUpdate) under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/).
 
 output:
   memor::pdf_memo:
-    short_title: Wikipedia Android app multilingual update
     use_profile: no
     logo: "../../wikimedia_foundation_logo.png"
     logo_height: "1.25in"
@@ -25,10 +23,6 @@ output:
       name: "\\href{https://www.mediawiki.org/wiki/Wikimedia_Audiences}{Wikimedia Audiences}"
       address: "\\href{https://www.mediawiki.org/wiki/Product_Analytics}{Product Analytics}"
       email: product-analytics@wikimedia.org
-    includes:
-      in_header: preamble.tex
-    latex_engine: xelatex
-  pdf_document:
     includes:
       in_header: preamble.tex
     latex_engine: xelatex
@@ -51,17 +45,7 @@ opts_chunk$set(
 options(knitr.table.format = "latex")
 ```
 ```{r utils}
-library(glue); library(magrittr); library(purrr); library(ggplot2)
-import::from(scales, percent); import::from(polloi, compress)
-import::from(wmf, percent2, pretty_num)
-import::from(
-  dplyr,
-  mutate, arrange, desc, select, rename,
-  group_by, ungroup, summarize, tally, top_n,
-  left_join, right_join, keep_where = filter
-)
-import::from(tidyr, spread, gather)
-source("helpers.R")
+source(here("report", "helpers.R"))
 # Language code mapping, see https://meta.wikimedia.org/wiki/Special_language_codes
 languages <- polloi::get_prefixes()[, c("language", "prefix")]
 languages <- languages$language %>%
@@ -98,6 +82,16 @@ languages <- c(languages, c(
 
 # Introduction
 
+Following the research and design work of Rita Ho, the Android team released a major update to the Wikipedia app on 25 June 2018, which improved and extended support for multilingual users (see [T160567](https://phabricator.wikimedia.org/T160567) for more information). The updated features include:
+
+- Users can not set multiple languages (previously they could only set one and would need to switch)
+  - Users are prompted during onboarding (Fig. 1A)
+  - Users can change their language settings from search and settings screens
+- The Explore Feed can contain content in multiple languages (Fig. 1B)
+- Users can customize which Explore Feed cards are enabled on a language-by-language basis (Fig. 1C)
+- Users can switch between languages when searching for articles (Fig. 7)
+
+The update also included analytics for the new and improved features (discussion and details documented in [T190931](https://phabricator.wikimedia.org/T190931)). During onboarding (and later in settings) users can opt out of sharing usage data, so the analysis in this report relies on data from those analytics-enrolled users. Furthermore, certain schemas/funnels use different sampling rates -- some at 100%, some at 10%, and some at 1% -- and in cases where the sampling rate is lower than 100% we refer to those users as a random sample or having been randomly selected.
 
 # Results
 
@@ -106,7 +100,7 @@ languages <- c(languages, c(
 language_settings <- readr::read_rds(here("data", "language_settings.rds"))
 language_searching <- readr::read_rds(here("data", "language_searching.rds"))
 # Sessions
-session_summaries <- readr::read_rds(here("data", "session_summaries.rds")) %>%
+sessions <- readr::read_rds(here("data", "sessions.rds")) %>%
   mutate(
     language_ability = lang_ability(n_languages),
     fct_pages_viewed = factor(
@@ -115,22 +109,101 @@ session_summaries <- readr::read_rds(here("data", "session_summaries.rds")) %>%
       labels = c(0:4, "5+")
     )
   )
-sampled_sessions <- session_summaries %>%
-  mutate(rand = runif(n())) %>%
-  group_by(app_install_id) %>%
-  top_n(1, rand) %>%
-  ungroup
 # Explore Feed
 feed_customization <- readr::read_rds(here("data", "feed_customization.rds")) %>%
   mutate(
     n_languages = map_int(languages, length),
-    language_ability = lang_ability(n_languages)
+    language_ability = lang_ability(n_languages),
+    enabled_counts = map(enabled_list, ~ lapply(.x, length)),
+    all_same = map_lgl(enabled_counts, ~ length(unique(.x)) == 1)
   )
 feed_sessions <- readr::read_rds(here("data", "feed_sessions.rds"))
 card_clickthroughs <- readr::read_rds(here("data", "card_clickthroughs.rds"))
 # Searching
 search_langswitches <- readr::read_rds(here("data", "search_langswitches.rds"))
 search_sessions <- readr::read_rds(here("data", "search_sessions.rds"))
+```
+
+```{r sessions_summary, cache=TRUE}
+session_streaks <- sessions %>%
+  mutate(date = as.Date(client_dt)) %>%
+  group_by(app_install_id, date) %>%
+  tally() %>%
+  mutate(
+    diff = c(0, abs(date[-n()] - date[-1])),
+    streak = cumsum(diff != 1) # grouping consecutive days
+  ) %>%
+  summarize(
+    n_days = n(),
+    avg_sessions_per_day = mean(n),
+    longest_streak = max(table(streak))
+  )
+session_reading <- sessions %>%
+  group_by(app_install_id) %>%
+  summarize(
+    avg_pages_viewed = ceiling(mean(total_pages)),
+    med_pages_viewed = ceiling(median(total_pages)),
+    fct_avg_pages_viewed = factor(
+      dplyr::if_else(avg_pages_viewed < 5, avg_pages_viewed, 5),
+      levels = c(0:5),
+      labels = c(0:4, "5+")
+    ),
+    fct_med_pages_viewed = factor(
+      dplyr::if_else(med_pages_viewed < 5, med_pages_viewed, 5),
+      levels = c(0:5),
+      labels = c(0:4, "5+")
+    ),
+    med_session_length = ceiling(median(session_length)),
+    avg_session_length = ceiling(mean(session_length)),
+    sessions = n()
+  )
+session_summary <- sessions %>%
+  group_by(app_install_id) %>%
+  top_n(1, client_dt) %>%
+  ungroup %>%
+  select(app_install_id, languages, n_languages, language_ability) %>%
+  left_join(session_streaks, by = "app_install_id") %>%
+  left_join(session_reading, by = "app_install_id")
+rm(session_streaks, session_reading)
+```
+
+```{r top_languages}
+top_languages <- session_summary %>%
+  select(app_install_id, langs = languages) %>%
+  mutate(langs = map(langs, ~ languages[.x])) %>%
+  {
+    purrr::map_df(
+      set_names(.$langs, .$app_install_id),
+      ~ dplyr::as_data_frame(.x),
+      .id = "app_install_id"
+    )
+  } %>%
+  group_by(app_install_id) %>%
+  mutate(
+    n_langs = n(),
+    n_langs = ifelse(n_langs > 4, 5, n_langs),
+    n_langs = factor(n_langs, 1:5, c(1:4, "5+"))
+  ) %>%
+  group_by(n_langs, lang = value) %>%
+  tally() %>%
+  mutate(prop = n / sum(n)) %>%
+  select(-n)
+top_20_languages <- top_languages %>%
+  group_by(n_langs) %>%
+  top_n(10, prop) %>%
+  mutate(prop = percent(prop))
+top_20_languages %>%
+  spread(n_langs, prop, fill = "--") %>%
+  arrange(lang) %>%
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  set_rownames(.$lang) %>%
+  select(-lang) %>%
+  kable(
+    booktabs = TRUE, align = "r",
+    caption = "Prevalence of languages among users who read in 1-5 or more languages. Within each group (by number of languages), the top 10 languages were selected. Those languages were then combined into an overall list. For example, users who read in Swedish make up 1.1\\% of monolingual users and Swedish is not used in conjunction with any other language. Users who have set Chinese (simplified and traditional) have only done so in conjunction with one or more other languages such as English or each other, but not by themselves."
+  ) %>%
+  add_header_above(c("", "Within users who read in this number of languages" = 5)) %>%
+  kable_styling(latex_options = c("striped", "hold_position"))
 ```
 
 ## Language settings
@@ -142,14 +215,47 @@ final_settings <- language_settings %>%
   ungroup
 ```
 
-```{r language_settings}
-final_settings %>%
+```{r language_combinations}
+language_combinations <- final_settings %>%
+  keep_where(n_final > 1) %>%
+  mutate(
+    languages = map_chr(
+      final,
+      ~ paste(sort(languages[.x]), collapse = ", ")
+    ),
+    n_final = factor(ifelse(n_final >= 3, 3, n_final), 2:3, c("2", "3+"))
+  ) %>%
+  group_by(n_final, languages) %>%
+  tally() %>%
+  mutate(prop = n / sum(n)) %>%
+  top_n(5, n) %>%
+  select(-n) %>%
+  ungroup %>%
+  arrange(n_final, desc(prop))
+language_combinations %>%
+  mutate(prop = percent2(prop, 1)) %>%
+  select(Languages = languages, `Proportion of bi/multilingual users` = prop) %>%
+  kable(
+    booktabs = TRUE, align = c("l", "r"),
+    caption = "Top five (unordered) language combinations (2 and 3+ separately)."
+  ) %>%
+  group_rows_v2("2 languages", which(language_combinations$n_final == "2")) %>%
+  group_rows_v2("3+ languages", which(language_combinations$n_final == "3+")) %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+```{r langset_breakdown}
+langset_breakdown <- final_settings %>%
   mutate(langs = factor(ifelse(n_final < 5, n_final, "5+"), c(1:4, "5+"))) %>%
   group_by(langs) %>%
   tally() %>%
-  mutate(prop = percent(n / sum(n))) %>%
+  mutate(prop = n / sum(n)) %>%
+  as.data.frame() %>%
+  set_rownames(.$langs)
+langset_breakdown %>%
   select(-n) %>%
   spread(langs, prop) %>%
+  map_df(percent) %>%
   as.data.frame() %>%
   set_rownames("Approximate % of users") %>%
   kable(
@@ -159,6 +265,19 @@ final_settings %>%
   add_header_above(c(" ", "Number of languages" = 5)) %>%
   kable_styling(latex_options = "hold_position")
 ```
+
+Among a random sample of users who have updated the app to at least [version 2.7.24x](https://phabricator.wikimedia.org/project/profile/3317/) from [Google Play Store](https://play.google.com/store/apps/details?id=org.wikipedia) and engaged with the language settings (either changed or left them as-is), `r percent(langset_breakdown["1", "prop"])` are monolingual, `r percent(langset_breakdown["2", "prop"])` are bilingual, and `r percent(langset_breakdown["3", "prop"] + langset_breakdown["4", "prop"] + langset_breakdown["5+", "prop"])` are multilingual (3 or more languages).
+
+```{r langsesh_breakdown}
+langsesh_breakdown <- session_summary %>%
+  group_by(language_ability) %>%
+  tally() %>%
+  mutate(prop = n / sum(n)) %>%
+  as.data.frame() %>%
+  set_rownames(.$language_ability)
+```
+
+However, of `r compress(sum(langsesh_breakdown$n), 1)` randomly-selected users who have used the new version of the app, `r percent(langsesh_breakdown["Monolingual", "prop"])` are monolingual, `r percent(langsesh_breakdown["Bilingual", "prop"])` are bilingual, and `r percent(langsesh_breakdown["Multilingual (3+)", "prop"])` are multilingual (3 or more languages).
 
 ```{r onboarding_summary}
 onboarding_summary <- language_settings %>%
@@ -182,39 +301,152 @@ onboarding_summary <- language_settings %>%
   as_vector
 ```
 
-During onboarding, of `r onboarding_summary['n_users']` sampled users, `r percent(onboarding_summary['n_removed'])` removed 1 or more languages, `r percent(onboarding_summary['n_added'])` added 1 or more languages, and `r percent(onboarding_summary['n_changed'])` changed their primary language.
+During onboarding, when the app detects languages from the user's system and keyboard settings and suggests them to the user (see Fig. 1A), of `r onboarding_summary['n_users']` sampled users, `r percent(onboarding_summary['n_removed'])` removed 1 or more languages, `r percent(onboarding_summary['n_added'])` added 1 or more languages, and `r percent(onboarding_summary['n_changed'])` changed their primary language.
 
 ## Reading behavior
 
-```{r sessions_summary, cache=TRUE}
-sessions_summary <- session_summaries %>%
-  group_by(app_install_id) %>%
-  arrange(desc(session)) %>%
-  summarize(
-    avg_session_length = cumulative_session_length[1] / session[1],
-    avg_pages_viewed = floor(mean(total_pages)),
-    most_languages = max(n_languages), last_languages = n_languages[1],
-    disagreement = most_languages != last_languages, sessions = session[1]
-  ) %>%
-  mutate(
-    status_most = lang_ability(most_languages),
-    status_last = lang_ability(last_languages),
-    fct_pages_viewed = factor(dplyr::if_else(avg_pages_viewed < 5, avg_pages_viewed, 5), levels = c(0:5), labels = c(0:4, "5+"))
+Currently, when a user stop using the app for more than 30 minutes (with basically any interaction with the app counting as usage), then we consider the current session as over, and send the summary of that session once the user interacts with the app again.
+
+```{r, fig.cap="Distribution of average session length per user by language ability.", fig.height=7}
+ggplot(
+  session_summary %>%
+    keep_where(avg_session_length > 0) %>%
+    group_by(language_ability) %>%
+    mutate(rand = runif(n())) %>%
+    top_n(table(session_summary$language_ability)["Bilingual"], rand),
+  aes(y = avg_session_length, x = language_ability)
+) +
+  ggforce::geom_sina(
+    aes(color = language_ability),
+    size = 1, scale = FALSE,
+    adjust = 0.5
+  ) +
+  scale_color_brewer(palette = "Set1") +
+  scale_y_log10(
+    breaks = c(1, 10, c(0.5, 1, 5, 10, 15, 30, 60) * 60),
+    labels = seconds_to_duration
+  ) +
+  labs(
+    title = "Average session length per user",
+    y = "Duration", x = NULL, color = "Language ability"
+  ) +
+  wmf::theme_min(14, "Source Sans Pro")
+```
+
+```{r aspd_quantiles, fig.width=10, fig.height=10, fig.cap="Distribution of average number of sessions per day by language ability, with percentiles."}
+aspd_quantiles <- session_summary %>%
+  { split(.$avg_sessions_per_day, .$language_ability) } %>%
+  map(quantile, probs = c(0.5, 0.8, 0.95, 0.99)) %>%
+  map(as.data.frame) %>%
+  map_df(function(x) {
+    colnames(x) <- "avg_sessions_per_day"
+    x$percentile <- rownames(x)
+    return(set_rownames(x, NULL))
+  }, .id = "la") %>%
+  mutate(language_ability = factor(la, c("Monolingual", "Bilingual", "Multilingual (3+)")))
+session_summary %>%
+  keep_where(avg_sessions_per_day <= 16) %>%
+  ggplot(aes(x = avg_sessions_per_day)) +
+  geom_density(aes(fill = language_ability), color = NA) +
+  facet_wrap(~ language_ability, ncol = 1, scale = "free_y") +
+  geom_linerange(
+    aes(ymin = 0, ymax = 0.4),
+    size = 1, data = aspd_quantiles
+  ) +
+  geom_label(
+    aes(y = 0.2, label = sub("%", "th", percentile, fixed = TRUE)),
+    label.size = 0.5, data = aspd_quantiles
+  ) +
+  geom_label(
+    aes(
+      y = 0.4, color = language_ability,
+      label = sprintf("%.1f", avg_sessions_per_day)
+    ),
+    label.size = 0.5, data = aspd_quantiles
+  ) +
+  scale_color_brewer(palette = "Set1", guide = FALSE) +
+  scale_fill_brewer(palette = "Set1") +
+  scale_x_continuous(breaks = 1:16) +
+  labs(
+    title = "Average sessions per user per day",
+    x = "Sessions/day", y = NULL, color = "Language ability", fill = "Language ability"
+  ) +
+  wmf::theme_facet(
+    22, "Source Sans Pro",
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank()
   )
 ```
 
+```{r, fig.cap='For each number of pages, the +/- percentages are relative to proportion of monolingual users who, on average, read that many pages per session.', fig.width=10, fig.height=6}
+session_summary %>%
+  mutate(
+    n_days = ifelse(n_days >= 10, 10, n_days),
+    n_days = factor(n_days, 1:10, c(1:9, "10+"))
+  ) %>%
+  group_by(status = language_ability, n_days) %>%
+  tally() %>%
+  mutate(prop = n / sum(n)) %>%
+  ungroup %>%
+  select(-n) %>%
+  mono_relative(n_days) %>%
+  ggplot(aes(x = n_days, y = prop, fill = status)) +
+  geom_bar(position = position_dodge2(width = 1), stat = "identity") +
+  geom_text(
+    aes(label = percent2(relative, 0, add_plus = TRUE), y = prop + 0.005),
+    position = position_dodge2(width = 1),
+    hjust = "middle", vjust = "bottom",
+  ) +
+  scale_y_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    title = "Number of days a user used the app during the first 2 weeks following update's release",
+    y = "Proportion of users",
+    x = "Days",
+    fill = "Language ability"
+  ) +
+  wmf::theme_min(14, "Source Sans Pro")
+```
+
+```{r, fig.cap='For each number of pages, the +/- percentages are relative to proportion of monolingual users who, on average, read that many pages per session.', fig.width=10, fig.height=6}
+session_summary %>%
+  mutate(
+    longest_streak = ifelse(longest_streak >= 7, 7, longest_streak),
+    longest_streak = factor(longest_streak, 1:7, c(paste(1:6, "day(s)"), "1 week or longer"))
+  ) %>%
+  group_by(status = language_ability, longest_streak) %>%
+  tally() %>%
+  mutate(prop = n / sum(n)) %>%
+  ungroup %>%
+  select(-n) %>%
+  mono_relative(longest_streak) %>%
+  ggplot(aes(x = longest_streak, y = prop, fill = status)) +
+  geom_bar(position = position_dodge2(width = 1), stat = "identity") +
+  geom_text(
+    aes(label = percent2(relative, 0, add_plus = TRUE), y = prop + 0.005),
+    position = position_dodge2(width = 1),
+    hjust = "middle", vjust = "bottom",
+  ) +
+  scale_y_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    title = "...",
+    y = "Proportion of users",
+    x = "Consecutive daily usage",
+    fill = "Longest streak of consecutive daily app usage"
+  ) +
+  wmf::theme_min(14, "Source Sans Pro")
+```
+
 ```{r pages_viewed, fig.cap='For each number of pages, the +/- percentages are relative to proportion of monolingual users who, on average, read that many pages per session.', fig.width=10}
-pages_viewed <- list(
-  last = sessions_summary %>%
-    group_by(status = status_last, pages = fct_pages_viewed) %>%
-    group_props %>%
-    mono_relative(pages),
-  most = sessions_summary %>%
-    group_by(status = status_most, pages = fct_pages_viewed) %>%
+pages_viewed <- session_summary %>%
+    group_by(status = language_ability, pages = fct_med_pages_viewed) %>%
     group_props %>%
     mono_relative(pages)
-)
-ggplot(pages_viewed[['last']], aes(fill = status, x = pages, y = prop)) +
+ggplot(pages_viewed, aes(fill = status, x = pages, y = prop)) +
   geom_bar(position = position_dodge2(width = 1), stat = "identity") +
   geom_text(
     aes(label = percent2(relative, 0, add_plus = TRUE), y = prop + 0.01),
@@ -224,8 +456,8 @@ ggplot(pages_viewed[['last']], aes(fill = status, x = pages, y = prop)) +
   scale_y_continuous(labels = percent) +
   scale_fill_brewer(palette = "Set1") +
   labs(
-    title = "Users who read in multiple languages read more",
-    y = "Proportion of users", x = "Average pages viewed per session", fill = "Language ability"
+    title = "Users who read in multiple languages tend to read more",
+    y = "Proportion of users", x = "Median pages viewed per session", fill = "Language ability"
   ) +
   wmf::theme_min(14, "Source Sans Pro")
 ```
@@ -233,6 +465,8 @@ ggplot(pages_viewed[['last']], aes(fill = status, x = pages, y = prop)) +
 ## Explore Feed
 
 ### Customization
+
+Based on the random sample of `r compress(length(unique(sort(feed_customization$app_install_id))), 3)` users from the feed customization analytics, there were `r nrow(dplyr::distinct(keep_where(feed_customization, !all_same), app_install_id))` users who customized their feed such that certain cards would be shown in some languages but not others. Users hide cards, but not for specific languages (where possible). Either users are not as aware of this feature as we would we would have hoped (more likely), or they really do want to see the cards in all the languages they have set (less likely). During onboarding -- including an additional notice in their feed -- we let users know that they can customize what is shown and how types of content are prioritized, but not that they can hide/show on a per-language basis.
 
 ```{r feed_abilities}
 feed_abilities <- feed_customization %>%
@@ -261,17 +495,17 @@ feed_customizations <- feed_customization %>%
 card_language_combinations <- feed_customizations %>%
   gather(card, language, -app_install_id) %>%
   keep_where(!is.na(language)) %>%
-  group_by(card, language) %>%
-  tally %>%
+  mutate(
+    language = languages[language]
+  ) %>%
+  group_by(app_install_id, card) %>%
+  summarize(
+    language_combo = paste0(sort(language), collapse = ", "),
+    language_combo_v2 = paste0(setdiff(sort(language), "English"), collapse = ", "),
+    has_english = "English" %in% language,
+    n_languages = n(), n_languages_v2 = n() - has_english
+  ) %>%
   ungroup
-```
-
-```{r}
-card_language_combinations %>%
-  group_by(language) %>%
-  mutate(prop = n / sum(n)) %>%
-  top_n(1, n) %>%
-  # TODO: do something with this
 ```
 
 ### Engagement
@@ -314,7 +548,7 @@ card_clickthroughs %>%
   rename(`Language ability` = language_ability) %>%
   kable(
     booktabs = TRUE, align = c("l", "r", "r"),
-    caption = "..."
+    caption = "Engagement with Feed cards by language ability and whether the cards are language-customizable (e.g. 'In the news') or not -- including cards which are language-agnostic such as onboarding cards and cards which are only available in English, such as 'Because you read'."
   ) %>%
   kable_styling(latex_options = "hold_position")
 ```
@@ -365,6 +599,19 @@ feed_engagement %>%
     \caption{Screenshots showing that users can switch between languages when searching Wikipedia.}\label{fig:searching}
 \end{figure}
 
+```{r search_switch_prop}
+search_switch_prop <- search_sessions %>%
+  keep_where(
+    app_install_id %in% session_summary$app_install_id
+  ) %>%
+  left_join(session_summary[, c("app_install_id", "language_ability")], by = "app_install_id") %>%
+  keep_where(language_ability != "Monolingual") %>%
+  summarize(prop = mean(language_switches > 0)) %>%
+  { .[[1]] }
+```
+
+Among users who read in more than one language, `r percent(search_switch_prop)` switch languages when searching.
+
 ```{r search_engagement}
 search_sessions %>%
   keep_where(saw_results) %>%
@@ -389,11 +636,13 @@ search_sessions %>%
   kable_styling(latex_options = "hold_position")
 ```
 
+We see a higher search abandonment rate among users who switched languages most likely because one of the reasons for switching languages is because they did not find a relevant result in one language.
+
 # Conclusion
 
 # Acknowledgements
 
-This report was created using the statistical software and programming language **R** [-@base]; with data visualization and analysis performed using packages which include **ggplot2** and **dplyr** [@ggplot2; -@dplyr]. Data collection relied on the excellent work of the [Mobile Apps](https://www.mediawiki.org/wiki/Wikimedia_Apps/Team) -- especially the instrumentation work of Sharvani Haran -- and [Analytics Engineering](https://wikitech.wikimedia.org/wiki/Analytics) teams.
+This report was created using the statistical software and programming language **R** [-@base]. Data collection relied on the excellent work of the [Mobile Apps](https://www.mediawiki.org/wiki/Wikimedia_Apps/Team) -- especially the instrumentation work of Sharvani Haran -- and data pipelines developed by [Analytics Engineering](https://wikitech.wikimedia.org/wiki/Analytics) teams.
 
 \newpage
 

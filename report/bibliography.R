@@ -14,6 +14,7 @@ pkgs <- c(
   "purrr",      # data workflow
   "tidyr",      # data workflow
   "wmf",        # data workflow
+  "ggforce",    # data visualization
   "ggplot2"     # data visualization
 )
 
