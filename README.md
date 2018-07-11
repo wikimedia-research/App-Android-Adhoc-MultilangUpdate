@@ -1,6 +1,8 @@
 # Multilingual Analytics (Initial Exploration)
 
-On 25 June 2018 the Android team released an update to the Wikipedia app that improved and extended support for multilingual users (see [T160567](https://phabricator.wikimedia.org/T160567) for more information). The update also included analytics for the new and improved features (discussion and details documented in [T190931](https://phabricator.wikimedia.org/T190931)).
+[![Creative Commons Attribution 4.0 International License](https://i.creativecommons.org/l/by/4.0/80x15.png)](http://creativecommons.org/licenses/by/4.0/)
+
+On 25 June 2018 the Android team released an update to the Wikipedia app that improved and extended support for multilingual users (see [T160567](https://phabricator.wikimedia.org/T160567) for more information).
 
 The updated features include:
 - Ability to set multiple languages
@@ -8,6 +10,14 @@ The updated features include:
   - Users can change their language settings from search and settings screens
 - Customize which Explore Feed cards are enabled on a language-by-language basis
 - Switch between languages when searching for articles
+
+| Onboarding | Feed customization | Feed |
+|:---:|:---:|:---:|
+| ![Screenshot of system and keyboard languages detected and suggested during onboarding for new users of the Wikipedia Android app.](report/screenshots/onboarding.png) | ![Feed can now include cards (such as most read articles) in multiple languages.](report/screenshots/feed.png) | ![Feed can be customized so certain cards show up in some languages but not others.](report/screenshots/feed_customization.png) |
+
+The update also included analytics for the new and improved features (discussion and details documented in [T190931](https://phabricator.wikimedia.org/T190931)). This report is an analysis of the data collected.
+
+A PDF of the report will be available on Wikimedia Commons once completed.
 
 ## Metrics
 
@@ -30,3 +40,8 @@ The updated features include:
 - Reading behavior by mono/bi/multi
   - median session length
   - median pages viewed per session
+
+## Licensing
+ 
+This work is licensed under the Creative Commons Attribution 4.0 International License, so if you see anything you like and want to use, you are welcome to do that with attribution. To view a copy of this license, visit [http://creativecommons.org/licenses/by/4.0/](http://creativecommons.org/licenses/by/4.0/).
+
