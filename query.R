@@ -15,13 +15,23 @@ library(glue); library(magrittr)
 
 common_cols <- "timestamp, event_app_install_id, event_client_dt"
 
+earliest_version <- "2.7.236-r-2018-06-25"
+earliest_date <- "20180625"
+latest_date <- "20180709"
+where_clause <- "WHERE timestamp >= '${earliest_date}' -- release
+  AND timestamp < '${latest_date}' -- 2 weeks after release
+  AND INSTR(userAgent, '-r-') > 0
+  AND REGEXP_SUBSTR(userAgent, '[0-9].[0-9].[0-9]{3}-[a-z]+-[0-9]{4}-[0-9]{2}-[0-9]{2}') >= '${earliest_version}'" %>%
+  glue(.open = "${")
+
 # Language settings and searching
 language_searches <- "SELECT
-  {common_cols}, event_session_token,
+  ${common_cols}, event_session_token,
   event_language, event_added, event_time_spent,
   NOT (event_search_string IS NULL OR event_search_string = '') AS searched
-FROM MobileWikiAppLanguageSearching_18113721" %>%
-  glue() %>%
+FROM MobileWikiAppLanguageSearching_18113721
+${where_clause}" %>%
+  glue(.open = "${") %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt")) %>%
   dplyr::group_by(app_install_id, session_token) %>%
@@ -34,10 +44,11 @@ FROM MobileWikiAppLanguageSearching_18113721" %>%
   view("language_searching") %>%
   readr::write_rds("data/language_searching.rds")
 "SELECT
-  {common_cols}, event_session_token,
+  ${common_cols}, event_session_token,
   event_source, event_initial, event_final, event_interactions
-FROM MobileWikiAppLanguageSettings_18113720" %>%
-  glue %>%
+FROM MobileWikiAppLanguageSettings_18113720
+${where_clause}" %>%
+  glue(.open = "${") %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(
     dt_cols = c("timestamp", "event_client_dt"),
@@ -95,11 +106,12 @@ feed_cards <- c(
   "8" = "Because you read"
 )
 "SELECT
-  {common_cols},
+  ${common_cols},
   event_languages, event_source, event_time_spent, event_enabled_list, event_order_list
 FROM MobileWikiAppFeedConfigure_18126175
-WHERE event_time_spent >= 0" %>%
-  glue() %>%
+${where_clause}
+  AND event_time_spent >= 0" %>%
+  glue(.open = "${") %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(
     dt_cols = c("timestamp", "event_client_dt"),
@@ -116,11 +128,12 @@ WHERE event_time_spent >= 0" %>%
 
 # Feed engagement
 "SELECT
-  {common_cols}, event_session_token,
+  ${common_cols}, event_session_token,
   event_time_spent, event_action
 FROM MobileWikiAppFeed_18115458
-WHERE event_action IN('enter', 'exit', 'cardShown', 'cardClicked', 'more')" %>%
-  glue() %>%
+${where_clause}
+  AND event_action IN('enter', 'exit', 'cardShown', 'cardClicked', 'more')" %>%
+  glue(.open = "${") %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt")) %>%
   dplyr::group_by(app_install_id, session_token) %>%
@@ -146,9 +159,10 @@ WHERE event_action IN('enter', 'exit', 'cardShown', 'cardClicked', 'more')" %>%
   event_time_spent, event_language, event_cardType AS card_type,
   IF(event_action = 'cardShown', 'impression', 'click') AS event
 FROM MobileWikiAppFeed_18115458
-WHERE event_action IN('cardShown', 'cardClicked')
+${where_clause}
+  AND event_action IN('cardShown', 'cardClicked')
   AND event_time_spent >= 0" %>%
-  glue() %>%
+  glue(.open = "${") %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt")) %>%
   dplyr::mutate(card_type = unname(card_types[as.character(card_type)])) %>%
@@ -169,21 +183,24 @@ WHERE event_action IN('cardShown', 'cardClicked')
   readr::write_rds("data/card_clickthroughs.rds")
 
 # Search
-language_switching <- "SELECT {common_cols}, event_session_token, event_language
+language_switching <- "SELECT ${common_cols}, event_session_token, event_language
 FROM MobileWikiAppSearch_18144266
-WHERE event_action = 'langswitch' AND event_language IS NOT NULL" %>%
-  glue() %>%
+${where_clause}
+  AND event_action = 'langswitch'
+  AND event_language IS NOT NULL" %>%
+  glue(.open = "${") %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt")) %>%
   tidyr::extract(language, c("from_language", "to_language"), "(.*)\\>(.*)") %T>%
   view("search_langswitches") %>%
   readr::write_rds("data/search_langswitches.rds")
 "SELECT
-  {common_cols}, event_session_token,
+  ${common_cols}, event_session_token,
   event_action, event_number_of_results
 FROM MobileWikiAppSearch_18144266
-WHERE event_action IN('start', 'results', 'click', 'cancel', 'langswitch')" %>%
-  glue() %>%
+${where_clause}
+  AND event_action IN('start', 'results', 'click', 'cancel', 'langswitch')" %>%
+  glue(.open = "${") %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt")) %>%
   dplyr::arrange(app_install_id, session_token, client_dt, action) %>%
@@ -204,20 +221,16 @@ WHERE event_action IN('start', 'results', 'click', 'cancel', 'langswitch')" %>%
 
 # Session summary
 "SELECT
-  {common_cols},
+  ${common_cols},
   event_languages, event_totalPages AS total_pages, event_length AS session_length
 FROM MobileWikiAppSessions_18115099
-WHERE event_length >= 0" %>%
-  glue() %>%
+${where_clause}
+  AND event_length >= 0" %>%
+  glue(.open = "${") %>%
   wmf::mysql_read(con = con) %>%
   wmf::refine_eventlogs(dt_cols = c("timestamp", "event_client_dt"), json_cols = "event_languages") %>%
   dplyr::mutate(n_languages = purrr::map_int(languages, length)) %>%
-  # keep 5 most recent sessions from each user, while remembering how many sessions we've observed:
-  dplyr::group_by(app_install_id) %>%
-  dplyr::arrange(client_dt, timestamp) %>%
-  dplyr::mutate(session = 1:n(), cumulative_session_length = cumsum(session_length)) %>%
-  dplyr::top_n(5, session) %>%
-  dplyr::ungroup() %>%
-  readr::write_rds("data/session_summaries.rds")
+  dplyr::arrange(app_install_id, client_dt, timestamp) %>%
+  readr::write_rds("data/sessions.rds")
 
 DBI::dbDisconnect(con)
