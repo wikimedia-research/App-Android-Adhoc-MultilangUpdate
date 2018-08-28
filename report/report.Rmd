@@ -14,32 +14,26 @@ abstract: |
   ----
   
   **Open report:** R code and RMarkdown source document are [publicly available](https://github.com/wikimedia-research/App-Android-Adhoc-MultilangUpdate) under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/).
-
 output:
-  memor::pdf_memo:
-    use_profile: no
-    watermark: "First Draft"
-    logo: "../../wikimedia_foundation_logo.png"
-    logo_height: "1.25in"
-    number_sections: no
-    fancy_captions: no
-    libertine: no
-    company:
-      name: "\\href{https://www.mediawiki.org/wiki/Wikimedia_Audiences}{Wikimedia Audiences}"
-      address: "\\href{https://www.mediawiki.org/wiki/Product_Analytics}{Product Analytics}"
-      email: product-analytics@wikimedia.org
-    includes:
-      in_header: preamble.tex
-    latex_engine: xelatex
-
-bibliography: packages.bib
-csl: apa.csl
+  wmfpar::pdf_report:
+    cite_r_packages:
+      # Presentation:
+      - kableExtra
+      # Data workflow:
+      - DBI
+      - dplyr
+      - forcats
+      - glue
+      - import
+      - jsonlite
+      - magrittr
+      - purrr
+      - tidyr
+      - wmf
+      # Data visualization:
+      - ggforce
+      - ggplot2
 nocite: '@*'
-
-fontsize: 12pt
-geometry: margin=1in
-mainfont: "Source Serif Pro"
-subparagraph: yes
 ---
 ```{r setup, include=FALSE}
 library(knitr); library(kableExtra); library(here)
