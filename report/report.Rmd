@@ -542,7 +542,7 @@ card_language_combinations <- feed_customizations %>%
 
 ### Engagement
 
-**Note**: while writing this report, we noticed several issues with feed analytics instrumentation -- most notably with logging impressions -- which will require further investigation and repairs. The statistics in Tables 4 and 5 are, therefore, estimates based on a much smaller subset of data than what is actually available. Since multilingual (3+) users are already not an especially large population of users, there were even fewer users who made it into the subset and so the clickthrough rates in Table 5 are 0% for almost all of the cards within this group.
+**Note**: while writing this report, we noticed several issues with feed analytics instrumentation -- most notably with logging impressions -- which will require a complete reworking. The statistics in Tables 4 and 5 are, therefore, estimates based on a *much* smaller subset of data than what is actually available. Since multilingual (3+) users are already not an especially large population of users, there were even fewer users who made it into the subset and so the clickthrough rates in Table 5 are 0% for almost all of the cards within this group.
 
 In Table 4, we can see that bilingual users are more likely to engage with the Feed than monolingual users. Interestingly, multilingual (3+ languages) users are less likely to engage with cards which are available in different languages but more likely to engage with cards which are language-agnostic or available in English only. Intuitively this makes sense in the context of the customization section above, where we showed that users do not customize the cards on a language-by-language basis. This means that users with 3 or more languages would have 3 (or more) versions of the same card, so they probably hide the card entirely or move it down, giving higher priority to other (language-agnostic and English-only) cards. It would be fascinating to explore this phenomenon in greater depth, but that endeavor is outside the scope of this report.
 
@@ -591,7 +591,7 @@ card_clickthroughs %>%
 
 ```{r feed_engagement}
 feed_engagement <- card_clickthroughs %>%
-  keep_where(!card_type %in% c("day header", "on this day card", "news list")) %>%
+  keep_where(!card_type %in% c("day header", "on this day card", "news list", "random card")) %>%
   dplyr::inner_join(feed_abilities, by = "app_install_id") %>%
   mutate(
     language_availability = available_in_other_languages[card_type],
@@ -619,7 +619,6 @@ feed_engagement %>%
 
 Table 5 breaks down each card type's clickthrough rates by language ability among a random sample of users. There are several notable statistics in this table:
 
-- Nobody uses the randomizer.
 - Engagement with featured article card is low across language abilities, although bilingual users show higher engagement since featured articles are shown in multiple languages so there is a greater chance of seeing a highlighted article that they might be interested in reading.
 - Unlike almost all other cards, bilingual users are less likely to click on the card which introduces them to [the reading list syncing feature](https://www.mediawiki.org/wiki/Wikimedia_Apps/Synced_Reading_Lists) (read more about this feature on [the Wikimedia Blog](https://blog.wikimedia.org/2018/05/25/synced-reading-lists/).
 
